@@ -124,6 +124,11 @@ The app keeps itself up to date: it checks for a new version each time it opens 
   - `.ini` → `engine/config/platform/pc`
 
   Archives that are already laid out from the game root (`archive/`, `bin/`, `r6/`, `red4ext/`, `engine/`, `mods/`) keep that layout, even inside wrapper folders. **FOMOD** installers get a step-by-step wizard. Readmes and images are not installed. Unknown files are reported in the console.
+
+  An archive with **no file in a known place** opens the **Place files** window instead of failing. The download's files are on the left (name, size, destination) and the game folder is on the right. Place files by dragging them onto a folder, or by selecting them and choosing **Place in <folder>**; a selected folder's contents go in with their subfolders.
+  - **New folder**, **Rename** and **Remove** work on folders made in the window and on this mod's files, until **Apply**. Game files and other mods' files are read-only and are never replaced.
+  - A file another mod already has is marked as a conflict, settled by mod order as usual.
+  - Nothing reaches the game until the mod is enabled. Installing the same mod again opens the window with the places chosen last time.
 - **Drag and drop** `.zip`, `.7z` or `.rar` archives onto the window to install them. Archives downloaded by hand from Nexus keep their mod ID and version (from the file name), so updates and version grouping work for them too.
 - The Mods list is in **A to Z** order (numbers in number order).
 - **Sort** (next to the Mods filters): A to Z, Z to A, recently installed or updated, recently enabled, recently disabled, or priority. The recent ones show under each mod when it happened ("enabled 2 h ago"), to find what changed when the game stops working. Enable and disable times are recorded from version 1.1.10 on; Vortex mods only when switched from this app.

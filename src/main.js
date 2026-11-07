@@ -375,6 +375,7 @@ function createWindow() {
   });
   // The content's scale: once loaded, and again when the window moves to a display with another scale.
   win.webContents.on('did-finish-load', applyScale);
+  win.webContents.on('did-finish-load', () => manager?.resendPlacements()); // a reload, or one asked before the window was ready
   let movedTimer = null;
   win.on('moved', () => { clearTimeout(movedTimer); movedTimer = setTimeout(applyScale, 300); });
   win.webContents.on('will-navigate', ev => ev.preventDefault());
@@ -427,6 +428,7 @@ async function boot() {
   manager.downloader.on('done', job => { if (job.modId) modImages.get(job.game, job.modId, job.version).catch(noted('Caching the mod picture')); });
   groups = setupGroups({ manager, settings, userData: app.getPath('userData'), cipher, log: logger, send, handle, gameRunning: () => manager.gameRunning() });
   manager.on('fomod', req => send('fomod', req));
+  manager.on('place', req => send('place', req));
   manager.startHealthChecks();
   // Vortex.exe wherever it was installed (the registry knows), unless one was chosen in Settings;
   // the Vortex watch starts after, so moving Vortex's mods never runs before Vortex.exe is known.
@@ -673,7 +675,7 @@ async function boot() {
     const stage = (name, text) => send('play', { stage: name, text });
     // Mod changes still being applied (an install, an enable) finish first, so the game starts with them.
     // Not while a mod's installer waits for its options (that waits for the user); never more than 30 s.
-    if (manager.pendingOps > 0 && !manager.pendingFomod.size) {
+    if (manager.pendingOps > 0 && !manager.pendingFomod.size && !manager.pendingPlace.size) {
       stage('applying', 'Applying mod changes…');
       let late;
       const timedOut = await Promise.race([manager.chain.then(() => false), new Promise(r => { late = setTimeout(() => r(true), 30000); })]);
@@ -1150,6 +1152,12 @@ async function boot() {
   handle('mods:purge', () => manager.purge());
   handle('fomod:submit', (token, selections) => manager.fomodSubmit(token, selections));
   handle('fomod:cancel', token => manager.fomodCancel(token));
+  // The Place files window: an install whose files are in no place the app knows.
+  const placePairs = pairs => (Array.isArray(pairs) ? pairs.slice(0, 5001).map(p => ({ src: String(p?.src ?? ''), dest: String(p?.dest ?? '') })) : []);
+  handle('place:list', (token, rel) => manager.placeList(String(token), String(rel ?? '')));
+  handle('place:check', (token, pairs) => manager.placeCheck(String(token), placePairs(pairs)));
+  handle('place:submit', (token, pairs) => manager.placeSubmit(String(token), placePairs(pairs)));
+  handle('place:cancel', token => manager.placeCancel(String(token)));
   handle('open:path', which => {
     const map = {
       game: manager.gameDir(), downloads: settings.downloadsDir, staging: settings.stagingDir,

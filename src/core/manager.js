@@ -15,7 +15,8 @@ const { Installer, isSafeRel } = require('./installer');
 const { Deployer } = require('./deployer');
 const { isGameDir, gameWindowsFolders } = require('./gameFinder');
 const { caseResolver } = require('./fileCase');
-const { sanitizeName } = require('./layout');
+const { sanitizeName, describeType } = require('./layout');
+const placement = require('./placement');
 const { ownerRoot } = require('./gameLogs');
 const { findUpdate } = require('./updates');
 const { VortexBridge, parseFolderName } = require('./vortex');
@@ -212,6 +213,7 @@ class ModManager extends EventEmitter {
     this.deployer = new Deployer({ manifestFile: path.join(dataDir, 'deployment.json'), backupDir: settings.backupDir, log });
     this.deployer.staleOriginal = (dest, file) => this.vortexStaleCopy(dest, file);
     this.pendingFomod = new Map();
+    this.pendingPlace = new Map(); // installs waiting in the Place files window
     this.plans = new Map();
     this.profileImports = new Map();
     this.ensureProfiles();
@@ -248,7 +250,7 @@ class ModManager extends EventEmitter {
   /** True while work is in progress that a restart (an app update) must not cut off. */
   get busy() {
     const dl = this.downloader;
-    return (this.pendingOps || 0) > 0 || dl.active > 0 || dl.queue.length > 0 || this.pendingFomod.size > 0 || !!this.vortex.busy;
+    return (this.pendingOps || 0) > 0 || dl.active > 0 || dl.queue.length > 0 || this.pendingFomod.size > 0 || this.pendingPlace.size > 0 || !!this.vortex.busy;
   }
 
   /** Run state-changing work one at a time. */
@@ -1189,11 +1191,131 @@ class ModManager extends EventEmitter {
       this.emit('fomod', { token: session.token, name: rec.name, modName: rec.modName, config: session.fomod.config, fileStates: states, imageBase, preset: opts.fomodChoices || null });
       return { key: rec.key, fomod: session.token };
     }
+    let plan;
     try {
-      return this.finishInstall(rec, session, null, null, opts);
+      plan = this.installer.plan(session, rec.modName, null, null);
+    } catch (err) {
+      this.installer.release(session.token);
+      throw err;
+    }
+    // Nothing the layout rules know: the files are placed by hand in the Place files window.
+    if (!plan.mappings.length && session.files.length && session.files.length <= placement.MAX_FILES) {
+      try {
+        return this.askPlacement(rec, session, opts);
+      } catch (err) {
+        this.pendingPlace.delete(session.token);
+        this.installer.release(session.token);
+        throw err;
+      }
+    }
+    try {
+      return this.finishInstall(rec, session, null, null, opts, plan);
     } finally {
       this.installer.release(session.token);
     }
+  }
+
+  // ---------------------------------------------------------------- placing files by hand
+
+  /** Open the Place files window for an install (a 'place' event); the install waits for it. */
+  askPlacement(rec, session, opts) {
+    // Placed by hand before (a reinstall, or the version this one updates): the same places again.
+    const before = this.data.mods[rec.key]?.placed || (opts.replaces && this.data.mods[opts.replaces]?.placed) || [];
+    const have = new Set(session.files);
+    const preset = {};
+    for (const pair of Array.isArray(before) ? before : []) {
+      if (Array.isArray(pair) && have.has(pair[0]) && placement.cleanDest(pair[1])) preset[pair[0]] = pair[1];
+    }
+    const files = session.files.map(f => {
+      let size = 0;
+      try { size = fs.statSync(path.join(session.extractDir, f)).size; } catch { /* listed, then gone */ }
+      return { path: f, size };
+    });
+    const game = this.gameDir();
+    const req = {
+      token: session.token, name: rec.name, fileName: rec.fileName, files, preset,
+      roots: placement.MOD_ROOTS, gameDir: isGameDir(game) ? game : '',
+    };
+    this.pendingPlace.set(session.token, { session, rec, opts, req });
+    this.log.warn(`${rec.name}: none of its ${session.files.length} files is in a place the app knows. Choose where they go in the Place files window.`);
+    this.emit('place', req);
+    return { key: rec.key, place: session.token };
+  }
+
+  /** The window (re)loaded: the Place files windows it should be showing are sent again. */
+  resendPlacements() {
+    for (const p of this.pendingPlace.values()) this.emit('place', p.req);
+  }
+
+  /** Who put a file there, for the checks: a mod, unless the file was changed since (then it counts as the game's). */
+  placeOwnerOf(game) {
+    return rel => {
+      const entry = this.deployer.deployed[rel.toLowerCase()];
+      return entry && this.deployer.fileState(game, entry) !== 'changed' ? entry.owner : '';
+    };
+  }
+
+  placeFor(token) {
+    const pending = this.pendingPlace.get(token);
+    if (!pending) throw new Error('That install has expired: install the download again.');
+    return pending;
+  }
+
+  /** One folder of the game folder, for the window's tree. */
+  placeList(token, rel) {
+    this.placeFor(token);
+    const game = this.gameDir();
+    const r = placement.listGameDir(isGameDir(game) ? game : '', rel, this.deployer.deployed);
+    const owner = this.placeOwnerOf(game);
+    const dir = placement.cleanDir(rel);
+    for (const f of r.files) if (f.owner && !owner(dir ? `${dir}/${f.name}` : f.name)) f.owner = ''; // changed by hand since
+    return r;
+  }
+
+  /** The window's places checked as Apply would check them: problems, and files other mods have there. */
+  placeCheck(token, pairs) {
+    const { session } = this.placeFor(token);
+    const game = this.gameDir();
+    const r = placement.checkPlacement({ pairs, files: session.files, gameDir: isGameDir(game) ? game : '', ownerOf: this.placeOwnerOf(game) });
+    const names = {};
+    for (const [dest, owner] of Object.entries(r.mods)) names[dest] = this.data.mods[owner]?.name || owner;
+    return { problems: r.problems, mods: names };
+  }
+
+  placeSubmit(token, pairs) {
+    return this.op(async () => {
+      const { session, rec, opts } = this.placeFor(token);
+      const game = this.gameDir();
+      const r = placement.checkPlacement({ pairs, files: session.files, gameDir: isGameDir(game) ? game : '', ownerOf: this.placeOwnerOf(game) });
+      if (r.problems.length) throw new Error(r.problems[0].text); // the window stays open to fix it
+      if (!r.mappings.length) throw new Error('No file has a place yet.');
+      const placed = new Set(r.mappings.map(m => m.src));
+      const plan = {
+        type: describeType(r.mappings.map(m => m.dest)), mappings: r.mappings,
+        skipped: session.files.filter(f => !placed.has(f)), warnings: [], notes: ['Its files were placed by hand.'], placed: true,
+      };
+      let out;
+      try {
+        out = this.finishInstall(rec, session, null, null, opts, plan);
+      } catch (err) {
+        // Staging failed (a full disk, a locked file): the unpacked files are still there, so the
+        // window stays usable to try again or cancel.
+        this.log.error(`Install failed: ${rec.name}`, err);
+        throw err;
+      }
+      this.pendingPlace.delete(token);
+      this.installer.release(token);
+      return out;
+    });
+  }
+
+  placeCancel(token) {
+    const pending = this.pendingPlace.get(token);
+    if (!pending) return;
+    this.pendingPlace.delete(token);
+    this.installer.release(token);
+    this.log.warn(`Install of ${pending.rec.name} cancelled`);
+    this.emit('changed');
   }
 
   fomodSubmit(token, selections) {
@@ -1221,8 +1343,8 @@ class ModManager extends EventEmitter {
     this.emit('changed');
   }
 
-  finishInstall(rec, session, selections, states, { auto = false, forceEnable = false, replaces = '', forProfiles = [] } = {}) {
-    const plan = this.installer.plan(session, rec.modName, selections, states);
+  finishInstall(rec, session, selections, states, { auto = false, forceEnable = false, replaces = '', forProfiles = [] } = {}, given = null) {
+    const plan = given || this.installer.plan(session, rec.modName, selections, states);
     if (!plan.mappings.length) {
       throw new Error(`Nothing in ${rec.fileName} looks like a Cyberpunk 2077 mod (${session.files.length} files, none in a known place).`);
     }
@@ -1242,7 +1364,9 @@ class ModManager extends EventEmitter {
       game: rec.game, version: rec.version, category: rec.category, author: rec.author,
       type: plan.type, files, skipped: plan.skipped.length, warnings: plan.warnings, notes: plan.notes || [],
       enabled: false, priority: old?.priority ?? this.data.nextPriority++, installedAt: Date.now(), enabledAt: Date.now(),
-      fomod: !!selections, fomodChoices: selections || undefined, dependencyOf: rec.dependencyOf || old?.dependencyOf || '',
+      fomod: !!selections, fomodChoices: selections || undefined,
+      ...(plan.placed ? { placed: plan.mappings.map(m => [m.src, m.dest]) } : {}),
+      dependencyOf: rec.dependencyOf || old?.dependencyOf || '',
       ...(rec.source === 'modio' && rec.modio ? { source: 'modio', modio: rec.modio } : {}),
     };
     this.data.mods[id] = mod;

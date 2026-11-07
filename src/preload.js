@@ -176,6 +176,10 @@ contextBridge.exposeInMainWorld('api', {
   purge: () => call('mods:purge'),
   fomodSubmit: (token, selections) => call('fomod:submit', token, selections),
   fomodCancel: token => call('fomod:cancel', token),
+  placeList: (token, rel) => call('place:list', token, rel),
+  placeCheck: (token, pairs) => call('place:check', token, pairs),
+  placeSubmit: (token, pairs) => call('place:submit', token, pairs),
+  placeCancel: token => call('place:cancel', token),
   openPath: which => call('open:path', which),
   openNexus: (game, modId) => call('open:nexus', game, modId),
   reportError: msg => ipcRenderer.send('renderer-error', String(msg)),
@@ -184,6 +188,7 @@ contextBridge.exposeInMainWorld('api', {
   onJob: on('job'),
   onLog: on('log'),
   onFomod: on('fomod'),
+  onPlace: on('place'),
   onToast: on('toast'),
   // Group Mods
   onGroups: on('groups'),
