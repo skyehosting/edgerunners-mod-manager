@@ -3311,7 +3311,9 @@ body.aip { height: 100vh; display: flex; flex-direction: column; overflow: hidde
 .gm-mod-name { display: flex; align-items: center; gap: var(--sp-2); font-weight: var(--fw-medium); }
 .gm-mod-sub { color: var(--muted); font-size: var(--fs-xs); }
 .gm-by { color: var(--text-2); font-size: var(--fs-sm); }
-.gm-row-acts { text-align: right; white-space: nowrap; }
+.gm-mod-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.gm-mod-line > .gm-mod { flex: 1; min-width: 0; }
+.gm-row-acts { display: inline-flex; gap: 0.15rem; flex: none; white-space: nowrap; }
 .gm-row-acts .btn { opacity: 0; }
 .gm-row:hover .gm-row-acts .btn, .gm-row-acts .btn:focus-visible, .gm-row-acts .btn[aria-pressed="true"] { opacity: 1; }
 .gm-row.st-disabled .gm-mod-name { color: var(--muted); }
@@ -3551,13 +3553,14 @@ iframe.fx-anim { color-scheme: normal; }
 .gm-head-slot .gm-title h2 { font-size: 1.15rem; }
 #page-mods.group-mode .page-head { margin-bottom: var(--sp-3); }
 .gm-main { container: gmmain / inline-size; }
-.gm-table col.gm-c-on { width: 4.8rem; }
-.gm-table col.gm-c-ver { width: 5.2rem; }
-.gm-table col.gm-c-by { width: 8.5rem; }
-.gm-table col.gm-c-who { width: 6.6rem; }
-.gm-table col.gm-c-st { width: 8.8rem; }
-.gm-table col.gm-c-acts { width: 7.4rem; }
-.gm-table .gm-row-acts { text-overflow: clip; }
+/* On: the arrow (1.5rem), a gap and a full-size switch (2.3rem), never squeezed. */
+.gm-table col.gm-c-on { width: calc(1.8rem + 1.5rem + 0.35rem + 2.3rem); }
+.gm-table col.gm-c-ver { width: 5.6rem; }
+.gm-table col.gm-c-by { width: 8rem; }
+.gm-table col.gm-c-who { width: 7rem; }
+.gm-table col.gm-c-st { width: 8.4rem; }
+.gm-table th.gm-on { text-align: left; }
+.gm-on-h { display: inline-block; width: 2.3rem; margin-left: calc(1.5rem + 0.35rem); text-align: center; }
 .gm-table .req-cell .tag { flex: none; }
 .gm-sub-ver { display: none; }
 /* Narrower: "Added by" goes first, then the version moves under the name; the name keeps its room. */
@@ -3572,20 +3575,27 @@ iframe.fx-anim { color-scheme: normal; }
 .gm-table .gm-mod-name, .gm-table .gm-mod-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gm-table .gm-by { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gm-on-cell { display: flex; align-items: center; gap: 0.35rem; }
-.gm-noswitch { display: inline-block; width: 2.5rem; height: 1.2rem; border: 1px dashed var(--line-strong); border-radius: 99px; opacity: .6; }
-.gm-who { display: inline-flex; flex-wrap: wrap; gap: 3px; vertical-align: middle; }
-.gm-av.gm-who-av { width: 1.45rem; height: 1.45rem; font-size: 0.6rem; border-width: 1.5px; }
-.gm-av.w-on { background: var(--ok-soft); color: var(--ok-text); border-color: var(--ok-line); }
-.gm-av.w-diff { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-line); }
-.gm-av.w-off { opacity: .38; }
-.gm-av.w-unknown { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--muted); }
+.gm-on-cell .switch { flex: none; }
+.gm-noswitch { display: inline-block; flex: none; width: 2.3rem; aspect-ratio: 34 / 20; border: 1px dashed var(--line-strong); border-radius: 99px; opacity: .6; }
+/* Who has it: overlapping, like the members at the top of the page (a ring of the row's colour between them). */
+.gm-who { display: inline-flex; align-items: center; vertical-align: middle; }
+.gm-av.gm-who-av { width: 1.6rem; height: 1.6rem; font-size: 0.62rem; border: 1.5px solid var(--line-strong); box-shadow: 0 0 0 2px var(--surface); }
+.gm-who .gm-who-av + .gm-who-av { margin-left: -0.45rem; }
+.gm-av.w-on { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); color: var(--ok-text); border-color: color-mix(in srgb, var(--ok) 45%, var(--surface)); }
+.gm-av.w-diff { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); color: var(--warn-text); border-color: color-mix(in srgb, var(--warn) 45%, var(--surface)); }
+.gm-av.w-off { background: var(--surface-2); color: var(--faint); border-color: var(--line); }
+.gm-av.w-unknown { background: var(--surface); border-style: dashed; border-color: var(--line-strong); color: var(--muted); }
 .gm-req-name { cursor: default; }
 .gm-req-name:hover { text-decoration: none; color: var(--text-2); }
 .gm-req-for { font-size: var(--fs-xs); }
 .gm-table tr.req-row .chips-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 /* Who has what: every list mod against every member */
-.modal:has(.gm-who-dialog) { width: min(72rem, calc(100vw - 2rem)); }
-.gm-who-scroll { max-height: min(62vh, 44rem); overflow: auto; border: 1px solid var(--line); border-radius: var(--r-lg); }
+/* "Who has what": a switch on the bar; the table takes the list's place. */
+.gm-who-toggle { gap: var(--sp-2); }
+.gm-who-toggle .switch { pointer-events: none; }
+.gm-who-toggle.on { border-color: var(--field-line); background: var(--surface-3); }
+.gm-who-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.gm-who-card { overflow: auto; }
 .gm-who-table { width: 100%; table-layout: auto; }
 .gm-who-table thead th { height: auto; padding-block: 0.55rem; vertical-align: bottom; }
 .gm-who-table th.gm-who-c, .gm-who-table td.gm-who-c { text-align: center; width: 7rem; }

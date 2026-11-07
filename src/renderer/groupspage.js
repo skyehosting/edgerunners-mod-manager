@@ -362,8 +362,7 @@ function gmReqRows(g, list, e, reqs) {
       h('td', { class: 'num' }, h('span', { class: 'req-ver' }, q.version || '')),
       h('td', {}, h('span', { class: 'muted gm-req-for' }, 'Needed by it')),
       h('td', {}, q.modId ? whoCell(g, q.modId, 0) : null),
-      h('td', {}, h('div', { class: 'chips-row' }, ...tags.filter(Boolean))),
-      h('td'));
+      h('td', {}, h('div', { class: 'chips-row' }, ...tags.filter(Boolean))));
   });
 }
 
@@ -376,13 +375,19 @@ function listTable(g, list, me) {
   search.addEventListener('input', () => { gm.q = search.value; paintGroups(); });
   const bar = h('div', { class: 'gm-bar' },
     h('label', { class: 'search' }, icon('search'), search),
-    list.mods.length ? h('button', { class: 'btn', dataset: { key: 'gm:who' }, onclick: () => openWhoHas(g, list), title: 'A table of every mod in the list and who has it on' }, icon('users'), h('span', {}, 'Who has what')) : null,
+    // A switch: the list below becomes the table of who has what, and back.
+    list.mods.length ? h('button', {
+      type: 'button', class: `btn gm-who-toggle${gm.whoView ? ' on' : ''}`, role: 'switch', 'aria-checked': String(!!gm.whoView), dataset: { key: 'gm:who' },
+      title: 'Switch between the list of mods and a table of who has each one on',
+      onclick: () => { gm.whoView = !gm.whoView; store.set('gm.whoView', gm.whoView); paintGroups(); },
+    }, h('span', { class: `switch sm${gm.whoView ? ' on' : ''}`, 'aria-hidden': 'true' }), icon('users'), h('span', {}, 'Who has what')) : null,
     counts.missing ? h('button', { class: 'btn btn-primary', onclick: () => openGet(g, list) }, icon('download'), h('span', {}, `Get the ${plural(counts.missing, 'mod')} you're missing`)) : null,
     h('span', { class: 'gm-count muted' }, `${plural(list.mods.length, 'mod')} in the list`));
   if (!list.mods.length) {
     return h('div', {}, bar, h('div', { class: 'gm-empty small' }, h('p', {}, 'This list is empty. Add mods you have installed: everyone in the group is asked before anything downloads.'),
       h('button', { class: 'btn btn-primary', onclick: () => openAddMods(g, list) }, icon('plus'), h('span', {}, 'Add mod'))));
   }
+  if (gm.whoView) return h('div', {}, bar, whoTable(g, list, mods));
   const rows = [];
   for (const e of mods) {
     const s = myStatus(e);
@@ -400,61 +405,58 @@ function listTable(g, list, me) {
         }, icon('chevron-right')) : h('span', { class: 'row-chev-space', 'aria-hidden': 'true' }),
         local ? modSwitch(local.mod, e.name, { where: `e${e.modId}`, title: local.exact ? '' : `You have another version (${local.mod.version || '?'}): click to switch it ${local.mod.enabled ? 'off' : 'on'}` })
           : h('span', { class: 'gm-noswitch', title: 'Not on this PC yet' }))),
-      h('td', {}, h('div', { class: 'gm-mod' }, h('span', { class: 'gm-mod-name' }, e.name, e.adult ? h('span', { class: 'tag tag-off' }, 'Adult') : null),
+      h('td', {}, h('div', { class: 'gm-mod-line' }, h('div', { class: 'gm-mod' }, h('span', { class: 'gm-mod-name' }, e.name, e.adult ? h('span', { class: 'tag tag-off' }, 'Adult') : null),
         h('span', { class: 'gm-mod-sub' }, e.version ? h('span', { class: 'gm-sub-ver' }, `v${e.version} · `) : null, sub || (e.modId < 0 ? 'mod.io' : 'Nexus Mods'), reqs.length ? h('span', {}, ` · ${plural(reqs.length, 'requirement')}`) : null,
           state.snap?.crossLinks?.[String(e.modId)] ? h('span', { class: 'tag tag-info gm-link-tag', title: 'You matched it to the same mod on the other site' }, e.modId < 0 ? 'Yours from Nexus' : 'Yours from mod.io',
-            h('button', { type: 'button', class: 'gm-unlink', 'aria-label': `Forget the match for ${e.name}`, title: 'Not the same mod: forget the match', onclick: async () => { if (await confirmBox(`Forget the match for ${e.name}?`, 'The mod you matched it to stays installed; it no longer counts as this list\'s mod.', 'Forget')) { await run(api.crossUnlink(e.modId)); loadGroups(); } } }, '×')) : null))),
-      h('td', { class: 'num' }, e.version || '–'),
-      h('td', {}, h('span', { class: 'gm-by' }, e.addedByName, h('span', { class: 'muted' }, ` · ${ago(e.changedAt || e.addedAt)}`))),
-      h('td', {}, whoCell(g, e.modId, e.fileId, e)),
-      h('td', {}, h('span', { class: `tag ${cls}` }, label), e.keep ? h('span', { class: 'tag tag-off', title: 'Kept for you even if it leaves the list' }, 'Kept for you') : null),
-      h('td', { class: 'gm-row-acts' },
+            h('button', { type: 'button', class: 'gm-unlink', 'aria-label': `Forget the match for ${e.name}`, title: 'Not the same mod: forget the match', onclick: async () => { if (await confirmBox(`Forget the match for ${e.name}?`, 'The mod you matched it to stays installed; it no longer counts as this list\'s mod.', 'Forget')) { await run(api.crossUnlink(e.modId)); loadGroups(); } } }, '×')) : null)),
+      h('span', { class: 'gm-row-acts' },
         e.modId < 0
           ? h('button', { class: 'btn btn-sm btn-ghost btn-icon', title: 'Open on mod.io', 'aria-label': `Open ${e.name} on mod.io`, onclick: async () => { const r = await api.modioMod(-e.modId); api.openModioPage(r.ok?.url || 'https://mod.io/g/cyberpunk-2077'); } }, icon('external'))
           : h('a', { class: 'btn btn-sm btn-ghost btn-icon', href: `https://www.nexusmods.com/cyberpunk2077/mods/${e.modId}`, target: '_blank', rel: 'noopener', title: 'Open on Nexus Mods', 'aria-label': `Open ${e.name} on Nexus Mods` }, icon('external')),
         h('button', { class: 'btn btn-sm btn-ghost btn-icon', title: e.keep ? 'Stop keeping it for you' : 'Keep it for me, even if someone removes it from the list', 'aria-label': `${e.keep ? 'Stop keeping' : 'Keep'} ${e.name} for me`, 'aria-pressed': String(!!e.keep), onclick: () => run(api.groupsKeep(g.id, e.modId, !e.keep)).then(loadGroups) }, icon('pin')),
-        h('button', { class: 'btn btn-sm btn-ghost-danger btn-icon', title: 'Remove from the list (disabled for members who got it through the group)', 'aria-label': `Remove ${e.name} from the list`, onclick: () => removeFromList(g, list, e) }, icon('x')))));
+        h('button', { class: 'btn btn-sm btn-ghost-danger btn-icon', title: 'Remove from the list (disabled for members who got it through the group)', 'aria-label': `Remove ${e.name} from the list`, onclick: () => removeFromList(g, list, e) }, icon('x'))))),
+      h('td', { class: 'num' }, e.version || '–'),
+      // Only the name; when, in its tooltip.
+      h('td', {}, h('span', { class: 'gm-by', title: `${e.changedAt && e.changedAt !== e.addedAt ? 'Changed' : 'Added'} ${ago(e.changedAt || e.addedAt)}` }, e.addedByName)),
+      h('td', {}, whoCell(g, e.modId, e.fileId, e)),
+      h('td', {}, h('span', { class: `tag ${cls}` }, label), e.keep ? h('span', { class: 'tag tag-off', title: 'Kept for you even if it leaves the list' }, 'Kept for you') : null)));
     if (open) rows.push(...gmReqRows(g, list, e, reqs));
   }
   return h('div', {}, bar, h('div', { class: 'table-card gm-table' },
     h('table', { class: 'grid', 'aria-label': `Mods in ${list.name}` },
-      h('colgroup', {}, h('col', { class: 'gm-c-on' }), h('col'), h('col', { class: 'gm-c-ver' }), h('col', { class: 'gm-c-by' }), h('col', { class: 'gm-c-who' }), h('col', { class: 'gm-c-st' }), h('col', { class: 'gm-c-acts' })),
-      h('thead', {}, h('tr', {}, h('th', { class: 'gm-on', 'aria-label': 'On for you' }, 'On'), h('th', {}, 'Mod'), h('th', {}, 'Version'), h('th', {}, 'Added by'), h('th', {}, 'Who has it'), h('th', {}, 'Status for you'), h('th', { 'aria-label': 'Actions' }))),
+      h('colgroup', {}, h('col', { class: 'gm-c-on' }), h('col'), h('col', { class: 'gm-c-ver' }), h('col', { class: 'gm-c-by' }), h('col', { class: 'gm-c-who' }), h('col', { class: 'gm-c-st' })),
+      h('thead', {}, h('tr', {}, h('th', { class: 'gm-on', 'aria-label': 'On for you' }, h('span', { class: 'gm-on-h' }, 'On')), h('th', {}, 'Mod'), h('th', {}, 'Version'), h('th', {}, 'Added by'), h('th', {}, 'Who has it'), h('th', {}, 'Status for you'))),
       h('tbody', {}, ...rows))));
 }
 
-/** Every mod in the list against every member: who has it on, another version, or not. */
-async function openWhoHas(g, list) {
+gm.whoView = !!store.get('gm.whoView', false);
+gm.whoOnly = false;
+/**
+ * In place of the list (the "Who has what" switch): every mod in the list against every member,
+ * whether each has it on, another version, or not. The search above filters it too.
+ */
+function whoTable(g, list, shown) {
   const members = [...g.members].sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name));
-  const mods = [...list.mods].sort((a, b) => a.name.localeCompare(b.name));
   const MARK = { on: ['check', 'Has it on'], diff: ['alert', 'Another version on'], off: [null, "Doesn't have it on"], unknown: [null, 'Not heard from yet'] };
-  const grid = mods.map(e => ({ e, who: whoHas({ ...g, members }, e.modId, e.fileId, e) }));
-  const only = h('input', { type: 'checkbox' });
-  const tbody = h('tbody');
-  const paint = () => {
-    const rows = only.checked ? grid.filter(r => r.who.some(w => w.st !== 'on')) : grid;
-    tbody.replaceChildren(...(rows.length ? rows.map(({ e, who }) => h('tr', {},
-      h('th', { scope: 'row' }, h('span', { class: 'gm-who-mod' }, e.name), h('span', { class: 'muted gm-who-ver' }, e.version ? ` ${e.version}` : '')),
-      ...who.map(w => h('td', { class: 'gm-who-c' }, h('span', { class: `gm-cell c-${w.st}`, role: 'img', 'aria-label': `${w.m.name}: ${MARK[w.st][1]}`, title: `${w.m.name}: ${MARK[w.st][1]}` }, MARK[w.st][0] ? icon(MARK[w.st][0]) : w.st === 'unknown' ? '?' : '–')))))
-      : [h('tr', {}, h('td', { colspan: String(members.length + 1), class: 'muted gm-who-none' }, 'Everyone has every mod on.'))]));
-  };
-  only.addEventListener('change', paint);
-  paint();
+  const grid = shown.map(e => ({ e, who: whoHas({ ...g, members }, e.modId, e.fileId, e) }));
+  // Each member's count is of the mods shown (the search narrows it), so it adds up with the rows.
   const totals = members.map((m, i) => grid.filter(r => r.who[i].st === 'on').length);
-  await modal({
-    title: `Who has what: ${list.name}`,
-    sub: `${plural(mods.length, 'mod')} · ${plural(members.length, 'member')} · each app reports the mods it has on`,
-    body: h('div', { class: 'gm-dialog gm-who-dialog' },
+  const rows = gm.whoOnly ? grid.filter(r => r.who.some(w => w.st !== 'on')) : grid;
+  const empty = !shown.length ? 'No mod in the list matches the search.' : gm.q.trim() ? 'Everyone has every matching mod on.' : 'Everyone has every mod on.';
+  const only = h('input', { type: 'checkbox', checked: gm.whoOnly, dataset: { key: 'gm:who-only' }, onchange: ev => { gm.whoOnly = ev.target.checked; paintGroups(); } });
+  return h('div', { class: 'gm-who-view' },
+    h('div', { class: 'gm-who-top' },
       h('label', { class: 'check' }, only, h('span', {}, 'Only mods someone doesn\'t have on')),
-      h('div', { class: 'gm-who-scroll' }, h('table', { class: 'grid gm-who-table' },
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Mod'), ...members.map((m, i) => h('th', { class: 'gm-who-c', scope: 'col' },
-          h('span', { class: 'gm-who-head' }, avatar(m), h('span', {}, m.me ? 'You' : m.name), h('span', { class: 'muted gm-who-n' }, `${totals[i]}/${mods.length}`)))))),
-        tbody)),
       h('div', { class: 'gm-who-legend muted' },
-        h('span', {}, h('span', { class: 'gm-cell c-on' }, icon('check')), 'Has it on'), h('span', {}, h('span', { class: 'gm-cell c-diff' }, icon('alert')), 'Another version on'),
+        h('span', {}, h('span', { class: 'gm-cell c-on' }, icon('check')), 'Has it on'), h('span', {}, h('span', { class: 'gm-cell c-diff' }, icon('alert')), 'Another version'),
         h('span', {}, h('span', { class: 'gm-cell c-off' }, '–'), "Doesn't have it on"), h('span', {}, h('span', { class: 'gm-cell c-unknown' }, '?'), 'Not heard from yet'))),
-    buttons: [{ label: 'Close', value: true, kind: 'btn-primary' }],
-  });
+    h('div', { class: 'table-card gm-who-card' }, h('table', { class: 'grid gm-who-table', 'aria-label': `Who has each mod in ${list.name}` },
+      h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Mod'), ...members.map((m, i) => h('th', { class: 'gm-who-c', scope: 'col' },
+        h('span', { class: 'gm-who-head' }, avatar(m), h('span', {}, m.me ? 'You' : m.name), h('span', { class: 'muted gm-who-n', title: `${m.me ? 'You have' : `${m.name} has`} ${totals[i]} of the ${plural(shown.length, 'mod')} shown on` }, `${totals[i]}/${shown.length}`)))))),
+      h('tbody', {}, ...(rows.length ? rows.map(({ e, who }) => h('tr', {},
+        h('th', { scope: 'row' }, h('span', { class: 'gm-who-mod' }, e.name), h('span', { class: 'muted gm-who-ver' }, e.version ? ` ${e.version}` : '')),
+        ...who.map(w => h('td', { class: 'gm-who-c' }, h('span', { class: `gm-cell c-${w.st}`, role: 'img', 'aria-label': `${w.m.name}: ${MARK[w.st][1]}`, title: `${w.m.name}: ${MARK[w.st][1]}` }, MARK[w.st][0] ? icon(MARK[w.st][0]) : w.st === 'unknown' ? '?' : '–')))))
+        : [h('tr', {}, h('td', { colspan: String(members.length + 1), class: 'muted gm-who-none' }, empty))])))));
 }
 
 // ---- a small menu (more actions for the group)
