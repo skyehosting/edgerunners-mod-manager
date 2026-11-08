@@ -569,6 +569,7 @@ function paintPlayMenu() {
 function openPlayMenu() {
   paintPlayMenu();
   $('#gl-play-menu').hidden = false;
+  keepInView($('#gl-play-menu'), $('#gl-play-btn'));
   $('#gl-play-btn').setAttribute('aria-expanded', 'true');
   ($('#gl-play-menu .play-opt[aria-selected="true"]') || $('#gl-play-menu .play-opt'))?.focus();
 }

@@ -475,7 +475,7 @@ function groupMenu(g, list) {
   const btn = h('button', { class: 'btn btn-icon', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: 'More', 'aria-label': 'More group actions', onclick: () => (menu.hidden ? open() : close()) }, icon('more'));
   const wrap = h('div', { class: 'menu-wrap' }, btn, menu);
   const outside = ev => { if (!wrap.contains(ev.target)) close(); };
-  function open() { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); menu.querySelector('.menu-item')?.focus(); document.addEventListener('mousedown', outside); }
+  function open() { menu.hidden = false; keepInView(menu, btn); btn.setAttribute('aria-expanded', 'true'); menu.querySelector('.menu-item')?.focus(); document.addEventListener('mousedown', outside); }
   function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('mousedown', outside); }
   menu.addEventListener('keydown', ev => {
     const items = [...menu.querySelectorAll('.menu-item')];

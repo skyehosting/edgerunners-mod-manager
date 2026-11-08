@@ -448,6 +448,7 @@ async function openPick(mode) {
     h('div', { class: 'sv-fpick-btns' }, h('button', { class: 'btn btn-ghost', onclick: closePick }, 'Cancel'), go));
   go.addEventListener('click', () => { const ids = rows.filter(r => r.box.checked).map(r => r.t.id); closePick(); transferSelected(mode, ids); });
   pick.hidden = false;
+  keepInView(pick);
   $(mode === 'move' ? '#saves-fmove' : '#saves-fcopy').setAttribute('aria-expanded', 'true');
   rows[0]?.box.focus();
   // How many of the ticked saves each profile has already (same sav.dat): those are skipped.
@@ -466,6 +467,7 @@ async function openPick(mode) {
     if (r.box.disabled) r.box.checked = false;
   }
   update();
+  if (!pick.hidden) keepInView(pick); // its notes are filled in now: it may have grown
 }
 
 async function transferSelected(mode, targets) {

@@ -2889,6 +2889,45 @@ window.addEventListener('resize', () => closeProfileMenu());
 
 // ---------------------------------------------------------------- "More" menu
 
+/**
+ * A pop-up that just opened in its usual place (an absolutely placed menu or box): moved back inside
+ * what can be seen when that place would run off an edge, so it is never cut off and the page never
+ * gets a sideways scrollbar. The edges are the window's and those of the page that scrolls around
+ * it. Given its button, a menu that has no room below opens above it if there is more room there;
+ * otherwise a menu that scrolls is made shorter (never below about three items). The arithmetic is
+ * FitBox.fitBox (src/shared/fitbox.js), tested on its own.
+ */
+function keepInView(el, anchor = null, pad = 8) {
+  el.style.translate = '';
+  el.style.maxHeight = '';
+  const parent = el.offsetParent;
+  if (el.hidden || !parent) return;
+  const root = document.documentElement;
+  const view = { left: 0, top: 0, right: root.clientWidth, bottom: root.clientHeight };
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const s = getComputedStyle(a);
+    if (!/auto|scroll/.test(s.overflowX + s.overflowY)) continue;
+    const b = a.getBoundingClientRect();
+    view.left = Math.max(view.left, b.left + a.clientLeft);
+    view.top = Math.max(view.top, b.top + a.clientTop);
+    view.right = Math.min(view.right, b.left + a.clientLeft + a.clientWidth);
+    view.bottom = Math.min(view.bottom, b.top + a.clientTop + a.clientHeight);
+    break;
+  }
+  // Where it is laid out (its opening animation's movement left out; a scrolled parent counted).
+  const p = parent.getBoundingClientRect();
+  const box = {
+    left: p.left + parent.clientLeft + el.offsetLeft - parent.scrollLeft,
+    top: p.top + parent.clientTop + el.offsetTop - parent.scrollTop,
+    width: el.offsetWidth,
+    height: el.offsetHeight,
+  };
+  const a = anchor?.getBoundingClientRect();
+  const fit = FitBox.fitBox({ box, view, anchor: a ? { top: a.top, bottom: a.bottom } : null, scrolls: /auto|scroll/.test(getComputedStyle(el).overflowY), pad });
+  if (fit.maxHeight != null) el.style.maxHeight = `${fit.maxHeight}px`;
+  if (fit.dx || fit.dy) el.style.translate = `${fit.dx}px ${fit.dy}px`;
+}
+
 /** A small menu button: click or Enter opens it, arrows move, Esc or a click outside closes it. */
 function menuButton(btnSel, menuSel) {
   const btn = $(btnSel);
@@ -2901,9 +2940,11 @@ function menuButton(btnSel, menuSel) {
   };
   const open = () => {
     menu.hidden = false;
+    keepInView(menu, btn);
     btn.setAttribute('aria-expanded', 'true');
     items()[0]?.focus();
   };
+  window.addEventListener('resize', () => { if (!menu.hidden) keepInView(menu, btn); });
   btn.addEventListener('click', () => (menu.hidden ? open() : close()));
   menu.addEventListener('click', ev => { if (ev.target.closest('.menu-item')) close(); });
   menu.addEventListener('keydown', ev => {
