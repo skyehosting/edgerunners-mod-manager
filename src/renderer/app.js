@@ -1076,6 +1076,7 @@ function renderMods() {
   renderModCats();
   renderModFilter();
   let mods = visibleMods();
+  const matched = mods.length; // before collapsed categories are left out: those still match
   const grouped = groupBySection(mods, all);
   if (grouped) mods = grouped.flatMap(g => (g.collapsed ? [] : g.mods)); // keyboard and Shift-click follow what is shown
   const ids = mods.map(m => m.id);
@@ -1160,9 +1161,10 @@ function renderMods() {
   $('#mods-req-all').setAttribute('aria-label', allOpen ? 'Hide the requirements under every mod' : 'Show the requirements under every mod');
 
   markInspected();
-  // Empty states: nothing installed vs nothing matching.
-  $('#mods-empty').hidden = mods.length > 0;
-  $('#mods-card').classList.toggle('is-empty', mods.length === 0);
+  // Empty states: nothing installed vs nothing matching. Every category collapsed is neither: the
+  // category rows stay, with nothing laid over them, so a click on the arrow opens one again.
+  $('#mods-empty').hidden = matched > 0;
+  $('#mods-card').classList.toggle('is-empty', matched === 0);
   $('#page-mods').classList.toggle('no-items', all.length === 0);
   if (!all.length) {
     $('#mods-empty-title').textContent = 'No mods installed';
