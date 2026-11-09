@@ -23,7 +23,10 @@ const { GameLogMonitor, ownerRoot } = require('./core/gameLogs');
 const { PlayHistory } = require('./core/plays');
 const { scaleFor, stepScale } = require('./core/scale');
 const { buildReport } = require('./core/report');
-const nxm = require('./core/nxmHandler');
+const nxm = process.platform === 'win32' ? require('./core/nxmHandler') : require('./core/nxmLinux').linuxNxm({
+  appImage: IS_APPIMAGE ? process.env.APPIMAGE : '',
+  handlerName: () => app.getApplicationNameForProtocol('nxm://'),
+});
 const { AppUpdater } = require('./core/updater');
 const { updateBeforeOpening } = require('./core/launchUpdate');
 const { PerfMonitor } = require('./core/perf');
@@ -1261,11 +1264,11 @@ process.on('unhandledRejection', err => logger.error(`Unhandled promise rejectio
 
 /*
  * Nexus "Mod Manager Download" links (nxm://). Off by default; when switched on in Settings this app
- * becomes the handler and a clicked link starts downloading here. Windows hands the link to a new
+ * becomes the handler and a clicked link starts downloading here. The system hands the link to a new
  * process, which passes it to the running one and exits (single instance).
  */
 const nxmArgs = () => (process.defaultApp ? [path.resolve(process.argv[1] || '.')] : []);
-const nxmBackupFile = () => path.join(app.getPath('userData'), 'nxm-previous-handler.reg');
+const nxmBackupFile = () => path.join(app.getPath('userData'), `nxm-previous-handler.${process.platform === 'win32' ? 'reg' : 'txt'}`);
 
 /** Who opens nxm:// links now, for Settings. */
 async function nxmStatus() {
@@ -1279,21 +1282,23 @@ async function nxmStatus() {
 }
 
 /**
- * Make the registry match the setting. On: save whoever handles the links now, then take them
- * over. Off: give them back to whoever had them before. Screenshot runs never touch the registry
+ * Make the system match the setting. On: save whoever handles the links now, then take them
+ * over. Off: give them back to whoever had them before. Screenshot runs never touch it
  * (their throwaway settings would undo the user's choice).
  */
 async function applyNxmSetting() {
   if (process.env.CMM_CAPTURE) return nxmStatus();
   const args = nxmArgs();
+  const on = settings.get('handleNxm');
+  if (on) nxm.prepare?.(); // Linux AppImage: every start too, as the file may have moved
   const ours = app.isDefaultProtocolClient('nxm', process.execPath, args);
-  if (settings.get('handleNxm')) {
+  if (on) {
     if (!ours) {
       const before = nxm.describe(await nxm.readCommand(), process.execPath);
       // Keep the first handler we replaced; a later Vortex start that took the links back is not it.
       if (!fs.existsSync(nxmBackupFile())) await nxm.backup(nxmBackupFile());
-      if (!app.setAsDefaultProtocolClient('nxm', process.execPath, args)) throw new Error('Windows did not accept this app as the handler for Nexus links.');
-      await nxm.setIcon(process.execPath);
+      if (!app.setAsDefaultProtocolClient('nxm', process.execPath, args)) throw new Error(`${process.platform === 'win32' ? 'Windows' : 'Your desktop'} did not accept this app as the handler for Nexus links.`);
+      await nxm.setIcon?.(process.execPath);
       logger.success(`Nexus "Mod Manager Download" links now open this app${before ? ` (they opened ${before} before)` : ''}`);
     }
   } else if (ours) {
@@ -1302,6 +1307,8 @@ async function applyNxmSetting() {
     const back = nxm.describe(await nxm.readCommand(), process.execPath);
     try { fs.unlinkSync(nxmBackupFile()); } catch { /* none */ }
     logger.success(`Nexus "Mod Manager Download" links are no longer handled by this app${back ? `; they open ${back} again` : saved ? '' : '; no other program was set before'}`);
+  } else {
+    nxm.release?.(); // Linux: another program took the links while this was on
   }
   return nxmStatus();
 }

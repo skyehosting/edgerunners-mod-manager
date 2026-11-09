@@ -2583,7 +2583,8 @@ $('#s-nxm').addEventListener('change', async ev => {
   if (!res) { refreshNxm(); return; }
   showNxmState(res);
   if (on && !res.ours) {
-    modal({ title: 'Windows did not switch', body: h('p', {}, `Nexus links still open ${res.handler || 'nothing'}. Try again, or check Windows Settings → Apps → Default apps → "Choose defaults by link type" → NXM.`), buttons: [{ label: 'OK', value: true, kind: 'btn-primary' }] });
+    const win = api.platform === 'win32';
+    modal({ title: `${win ? 'Windows' : 'Your desktop'} did not switch`, body: h('p', {}, `Nexus links still open ${res.handler || 'nothing'}. Try again, or check ${win ? 'Windows Settings → Apps → Default apps → "Choose defaults by link type" → NXM' : 'the default applications in your desktop\'s settings'}.`), buttons: [{ label: 'OK', value: true, kind: 'btn-primary' }] });
   } else if (on) {
     modal({ title: 'Nexus downloads come here now', body: h('p', {}, 'Click "Mod Manager Download" on any mod\'s Files tab to try it. Your browser asks once whether to open Cyber Mod Manager.'), buttons: [{ label: 'OK', value: true, kind: 'btn-primary' }] });
   } else {
