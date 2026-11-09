@@ -42,4 +42,15 @@ function findUpdate(files, fileUpdates, installedId) {
   return candidate || null;
 }
 
-module.exports = { findUpdate };
+/**
+ * Which line of a mod's files a Nexus file category belongs to. Main, update and old version are one
+ * line (a main file becomes an "old version" when the author releases a newer one), and a file
+ * installed by hand (LOCAL: only its Nexus id is known, from its name) counts as a main file; optional
+ * and other files are only versions of their own kind.
+ */
+const fileLine = category => {
+  const c = String(category || '').toUpperCase();
+  return ['MAIN', 'UPDATE', 'OLD_VERSION', 'LOCAL'].includes(c) ? 'MAIN' : c;
+};
+
+module.exports = { findUpdate, fileLine };

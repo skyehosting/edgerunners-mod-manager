@@ -7,6 +7,7 @@ const firewall = require('./firewall');
 const upnp = require('./upnp');
 const publicIp = require('./publicIp');
 const { scanSaves } = require('../saves');
+const { fileLine } = require('../updates');
 
 /*
  * Group Mods inside the app: the GroupService (network, log) on one side, this PC's mods on the other.
@@ -329,16 +330,17 @@ function setupGroups({ manager, settings, userData, cipher, log, send, handle, g
         // Main), and only when exactly one fits (an optional patch is never taken for the main file).
         // Main, update and old version are one line (a pinned main file becomes an "old version" on Nexus
         // when the author releases a newer one); optional and other files only match their own kind.
-        const line = c => (['MAIN', 'UPDATE', 'OLD_VERSION'].includes(c) ? 'MAIN' : c);
+        // Replacing one takes over its on/off state and profiles; only a mod new here joins the profile in use.
         const oldOf = cat => {
-          const fits = Object.values(manager.data.mods).filter(m => Number(m.modId) === modId && Number(m.fileId) !== fileId && line(String(m.category || '').toUpperCase()) === line(cat));
+          const fits = Object.values(manager.data.mods).filter(m => Number(m.modId) === modId && Number(m.fileId) !== fileId && fileLine(m.category) === fileLine(cat));
           return fits.length === 1 ? fits[0].id : '';
         };
+        const landing = replaces => (replaces ? { replaces } : { forProfiles: [active] });
         try {
           const have = manager.data.downloads?.[String(fileId)];
           if (have && fs.existsSync(have.path) && !manager.data.mods[String(fileId)]) {
             asked.push(fileId);
-            const res = await manager.install([have.key], { forProfiles: [active], replaces: oldOf(String(have.category || '').toUpperCase()) });
+            const res = await manager.install([have.key], landing(oldOf(have.category)));
             const bad = (res || []).find(x => x?.error);
             if (bad) failed.push(`mod ${modId}: ${bad.error}`); else installed++;
             continue;
@@ -347,8 +349,7 @@ function setupGroups({ manager, settings, userData, cipher, log, send, handle, g
           const f = info.files.find(x => Number(x.file_id) === fileId);
           if (!f || ['DELETED', 'ARCHIVED'].includes(String(f.category_name || '').toUpperCase())) { gone.push(info.name); continue; }
           asked.push(fileId);
-          const replaces = oldOf(String(f.category_name || '').toUpperCase());
-          await manager.queueFiles(info, [f], '', summary, replaces ? { replaces, forProfiles: [active] } : { forProfiles: [active] });
+          await manager.queueFiles(info, [f], '', summary, landing(oldOf(f.category_name)));
         } catch (err) {
           failed.push(`mod ${modId}: ${err.message}`);
         }

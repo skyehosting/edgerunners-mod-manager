@@ -18,7 +18,7 @@ const { caseResolver } = require('./fileCase');
 const { sanitizeName, describeType } = require('./layout');
 const placement = require('./placement');
 const { ownerRoot } = require('./gameLogs');
-const { findUpdate } = require('./updates');
+const { findUpdate, fileLine } = require('./updates');
 const { VortexBridge, parseFolderName } = require('./vortex');
 const { listFiles, removeEmptyDirs } = require('./vortexDeploy');
 const { Mo2Bridge } = require('./mo2');
@@ -1353,7 +1353,8 @@ class ModManager extends EventEmitter {
     const prev = replaces && replaces !== id ? this.data.mods[replaces] : null;
     const old = this.data.mods[id] || (prev ? { priority: prev.priority, enabled: false, dependencyOf: prev.dependencyOf } : null);
     const stagingDir = path.join(this.settings.stagingDir, id);
-    if (old?.enabled) {
+    const wasOn = !!old?.enabled; // (it is taken out of the game while its files are replaced)
+    if (wasOn) {
       old.enabled = false;
       this.deploy();
     }
@@ -1373,7 +1374,7 @@ class ModManager extends EventEmitter {
     this.library.save();
     if (prev) {
       // Swap old for new in one deployment, so the game never sees both or neither.
-      mod.enabled = prev.enabled;
+      mod.enabled = prev.enabled || wasOn;
       delete this.data.mods[prev.id];
       for (const [vid, own] of Object.entries(this.data.vortexAdopted || {})) if (own === prev.id) this.data.vortexAdopted[vid] = id;
       // Its picks in the conflict window carry over to the new version (for the files it still has).
@@ -1403,7 +1404,7 @@ class ModManager extends EventEmitter {
         mod.enabled = true;
         this.applyProfilePriorities(act);
         this.deploy();
-      } else if (old?.enabled) {
+      } else if (wasOn) {
         // Reinstalled while the active profile uses it: keep it on there.
         mod.enabled = true;
         this.deploy();
@@ -1413,11 +1414,26 @@ class ModManager extends EventEmitter {
       }
       return { key: rec.key, id, type: plan.type };
     }
-    if (forceEnable || (auto && this.settings.get('autoEnable')) || old?.enabled) {
+    // Switched on by itself only when it is new here: a reinstall or an update keeps what the mod
+    // had, and a newer file of a mod that is off (a Nexus page's download, say) stays off too.
+    const autoOn = auto && !old && !replaces && this.settings.get('autoEnable');
+    const others = autoOn && !forceEnable ? this.otherVersionsOf(rec) : [];
+    const offLikeOthers = others.length > 0 && others.every(m => !m.enabled);
+    if (offLikeOthers) this.log.info(`${rec.name} stays off, like the other version of it already here.`);
+    if (forceEnable || wasOn || (autoOn && !offLikeOthers)) {
       mod.enabled = true;
       this.deploy();
     }
     return { key: rec.key, id, type: plan.type };
+  }
+
+  /**
+   * The installed mods that are other versions of a download: the same mod, in the same line of files.
+   */
+  otherVersionsOf(rec) {
+    return Object.values(this.data.mods).filter(m => m.id !== rec.key && (rec.modio?.id
+      ? m.modio?.id === rec.modio.id
+      : Number(rec.modId) > 0 && Number(m.modId) === Number(rec.modId) && fileLine(m.category) === fileLine(rec.category)));
   }
 
   // ---------------------------------------------------------------- health: mods changed outside the app
